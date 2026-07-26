@@ -170,4 +170,166 @@ class HTTPServer:
 
         mime = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
         content = file_path.read_text()
-        resp 
+        resp = Response()
+        resp.status = 200
+        resp.body = content
+        resp.headers["Content-Type"] = mime
+        return resp
+
+    def handle_client(self, conn: socket.socket, addr):
+        try:
+            raw = conn.recv(8192).decode("utf-8", errors="replace")
+            if not raw:
+                return
+
+            req  = self.parse_request(raw)
+            resp = Response()
+            self.request_count += 1
+
+            for mw in self.router.middleware:
+                result = mw(req, resp)
+                if result is False:
+                    conn.sendall(resp.build())
+                    return
+
+            handler, params = self.router.match(req.method, req.path)
+            req.params = params
+
+            if handler:
+                handler(req, resp)
+            elif self.static_dir:
+                static_resp = self.serve_static(req.path)
+                if static_resp:
+                    resp = static_resp
+                else:
+                    self.handle_error(404, req, resp)
+            else:
+                self.handle_error(404, req, resp)
+
+            conn.sendall(resp.build())
+
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            print(f"  [{timestamp}] {addr[0]} {req.method} {req.path} → {resp.status}")
+
+        except Exception as e:
+            traceback.print_exc()
+            error_resp = Response()
+            error_resp.json({"error": str(e)}, 500)
+            try:
+                conn.sendall(error_resp.build())
+            except:
+                pass
+        finally:
+            conn.close()
+
+    def handle_error(self, status: int, req: Request, resp: Response):
+        if status in self.router.error_handlers:
+            self.router.error_handlers[status](req, resp)
+        else:
+            resp.json({"error": Response.STATUS_TEXT.get(status, "Error")}, status)
+
+    def run(self):
+        self.start_time = datetime.now()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen(128)
+
+        print("=" * 50)
+        print(f"  HTTP Server running on http://{self.host}:{self.port}")
+        print("=" * 50)
+
+        try:
+            while True:
+                conn, addr = sock.accept()
+                thread = threading.Thread(target=self.handle_client, args=(conn, addr))
+                thread.daemon = True
+                thread.start()
+        except KeyboardInterrupt:
+            print("\n  Server stopped.")
+        finally:
+            sock.close()
+
+
+app = HTTPServer(port=8080)
+
+users_db = [
+    {"id": 1, "name": "Alice",   "email": "alice@test.com",   "role": "admin"},
+    {"id": 2, "name": "Bob",     "email": "bob@test.com",     "role": "user"},
+    {"id": 3, "name": "Charlie", "email": "charlie@test.com", "role": "user"},
+]
+next_id = 4
+
+@app.router.use
+def logger(req, resp):
+    req.headers["x-request-time"] = datetime.now().isoformat()
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["X-Powered-By"] = "PyMicro"
+
+@app.router.get("/")
+def index(req, resp):
+    resp.html("""
+    <h1>PyMicro HTTP Framework</h1>
+    <ul>
+        <li><a href="/api/users">GET /api/users</a></li>
+        <li><a href="/api/stats">GET /api/stats</a></li>
+        <li><a href="/health">GET /health</a></li>
+    </ul>
+    """)
+
+@app.router.get("/health")
+def health(req, resp):
+    uptime = str(datetime.now() - app.start_time) if app.start_time else "0"
+    resp.json({"status": "ok", "uptime": uptime, "requests": app.request_count})
+
+@app.router.get("/api/users")
+def get_users(req, resp):
+    role = req.get("role")
+    filtered = [u for u in users_db if not role or u["role"] == role]
+    resp.json({"users": filtered, "count": len(filtered)})
+
+@app.router.get("/api/users/:id")
+def get_user(req, resp):
+    uid = int(req.params.get("id", 0))
+    user = next((u for u in users_db if u["id"] == uid), None)
+    if user:
+        resp.json(user)
+    else:
+        resp.json({"error": "User not found"}, 404)
+
+@app.router.post("/api/users")
+def create_user(req, resp):
+    global next_id
+    data = req.json()
+    if not data.get("name") or not data.get("email"):
+        resp.json({"error": "name and email required"}, 422)
+        return
+    user = {"id": next_id, "name": data["name"], "email": data["email"], "role": data.get("role", "user")}
+    users_db.append(user)
+    next_id += 1
+    resp.json(user, 201)
+
+@app.router.delete("/api/users/:id")
+def delete_user(req, resp):
+    uid = int(req.params.get("id", 0))
+    user = next((u for u in users_db if u["id"] == uid), None)
+    if user:
+        users_db.remove(user)
+        resp.json({"deleted": uid})
+    else:
+        resp.json({"error": "User not found"}, 404)
+
+@app.router.get("/api/stats")
+def stats(req, resp):
+    resp.json({
+        "total_users": len(users_db),
+        "roles": {r: sum(1 for u in users_db if u["role"] == r) for r in set(u["role"] for u in users_db)},
+        "requests_served": app.request_count
+    })
+
+@app.router.error(404)
+def not_found(req, resp):
+    resp.json({"error": "Route not found", "path": req.path}, 404)
+
+if __name__ == "__main__":
+    app.run()
