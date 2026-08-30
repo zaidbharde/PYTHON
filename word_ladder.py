@@ -1,30 +1,24 @@
 from collections import deque
 
-def word_ladder_length(begin_word, end_word, word_list):
-    word_set = set(word_list)
-    if end_word not in word_set:
+
+def ladder_length(start, target, words):
+    dictionary = set(words)
+    if target not in dictionary:
         return 0
-
-    queue = deque([(begin_word, 1)])
-    visited = {begin_word}
-
+    queue = deque([(start, 1)])
     while queue:
-        word, steps = queue.popleft()
-        if word == end_word:
-            return steps
-
-        for i in range(len(word)):
-            for c in "abcdefghijklmnopqrstuvwxyz":
-                next_word = word[:i] + c + word[i+1:]
-                if next_word in word_set and next_word not in visited:
-                    visited.add(next_word)
-                    queue.append((next_word, steps + 1))
-
+        word, distance = queue.popleft()
+        if word == target:
+            return distance
+        for index in range(len(word)):
+            for letter in "abcdefghijklmnopqrstuvwxyz":
+                candidate = word[:index] + letter + word[index + 1:]
+                if candidate in dictionary:
+                    dictionary.remove(candidate)
+                    queue.append((candidate, distance + 1))
     return 0
 
 
 if __name__ == "__main__":
-    begin = "hit"
-    end = "cog"
-    word_list = ["hot", "dot", "dog", "lot", "log", "cog"]
-    print(f"Shortest transformation: {word_ladder_length(begin, end, word_list)}")
+    words = {"hot", "dot", "dog", "lot", "log", "cog"}
+    print(ladder_length("hit", "cog", words))
