@@ -162,10 +162,11 @@ class HTTPServer:
     def serve_static(self, path: str) -> Optional[Response]:
         if not self.static_dir:
             return None
-        file_path = self.static_dir / path.lstrip("/")
-        if not file_path.is_file():
+        root = self.static_dir.resolve()
+        file_path = (root / path.lstrip("/")).resolve()
+        if not file_path.is_relative_to(root):
             return None
-        if not str(file_path.resolve()).startswith(str(self.static_dir.resolve())):
+        if not file_path.is_file():
             return None
 
         mime = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
