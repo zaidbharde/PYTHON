@@ -230,7 +230,7 @@ class Query:
         return and_match
 
     def execute(self) -> QueryResult:
-        if self._conditions and len(self._conditions) == 1:
+        if self._conditions and len(self._conditions) == 1 and not self._or_conditions:
             col, op, val = self._conditions[0]
             if op == "=" and col in self.table.indexes:
                 indices = self.table.indexes[col].lookup(val)
