@@ -230,7 +230,7 @@ class Query:
         return and_match
 
     def execute(self) -> QueryResult:
-        if self._conditions and len(self._conditions) == 1:
+        if self._conditions and len(self._conditions) == 1 and not self._or_conditions:
             col, op, val = self._conditions[0]
             if op == "=" and col in self.table.indexes:
                 indices = self.table.indexes[col].lookup(val)
@@ -247,7 +247,7 @@ class Query:
             rows.sort(key=lambda r: r.get(self._order_by, 0), reverse=self._order_desc)
 
         rows = rows[self._offset:]
-        if self._limit:
+        if self._limit is not None:
             rows = rows[:self._limit]
 
         if self._select:
@@ -257,7 +257,7 @@ class Query:
             seen = set()
             unique = []
             for r in rows:
-                key = tuple(sorted(r.items()))
+                key = json.dumps(r, sort_keys=True, separators=(",", ":"), default=str)
                 if key not in seen:
                     seen.add(key)
                     unique.append(r)

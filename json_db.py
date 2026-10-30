@@ -34,7 +34,8 @@ class Collection:
         return self.db.data["collections"][self.name]
 
     def insert(self, doc):
-        doc["_id"] = len(self._docs) + 1
+        next_id = max((item.get("_id", 0) for item in self._docs), default=0) + 1
+        doc["_id"] = next_id
         doc["_created"] = datetime.now().isoformat()
         self._docs.append(doc)
         self.db._save()

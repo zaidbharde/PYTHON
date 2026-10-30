@@ -8,6 +8,8 @@ from typing import Any
 def flatten(value: Any, prefix: str = "") -> dict[str, Any]:
     """Return JSON Pointer-like paths for every scalar leaf."""
     if isinstance(value, Mapping):
+        if not value:
+            return {prefix: {}} if prefix else {}
         output: dict[str, Any] = {}
         for key in sorted(value, key=str):
             escaped = str(key).replace("~", "~0").replace("/", "~1")
@@ -15,6 +17,8 @@ def flatten(value: Any, prefix: str = "") -> dict[str, Any]:
         return output
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         output = {}
+        if not value:
+            return {prefix: []} if prefix else {}
         for index, item in enumerate(value):
             output.update(flatten(item, f"{prefix}/{index}"))
         return output
