@@ -247,7 +247,7 @@ class Query:
             rows.sort(key=lambda r: r.get(self._order_by, 0), reverse=self._order_desc)
 
         rows = rows[self._offset:]
-        if self._limit:
+        if self._limit is not None:
             rows = rows[:self._limit]
 
         if self._select:
