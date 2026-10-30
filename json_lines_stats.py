@@ -19,7 +19,7 @@ def summarize(stream):
 
 
 if __name__ == "__main__":
-    sample = StringIO('{"level":"info","duration_ms":12}
+    sample = StringIO('''{"level":"info","duration_ms":12}
 {"level":"error"}
-')
+''')
     print(summarize(sample))
