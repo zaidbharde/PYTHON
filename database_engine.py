@@ -257,7 +257,7 @@ class Query:
             seen = set()
             unique = []
             for r in rows:
-                key = tuple(sorted(r.items()))
+                key = json.dumps(r, sort_keys=True, separators=(",", ":"), default=str)
                 if key not in seen:
                     seen.add(key)
                     unique.append(r)
