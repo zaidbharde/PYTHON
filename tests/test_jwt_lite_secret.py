@@ -22,6 +22,10 @@ class JwtSecretTests(unittest.TestCase):
         self.assertIsNone(verify_token("not-a-token", self.KEY))
         self.assertIsNone(verify_token(None, self.KEY))
 
+    def test_non_base64url_signature_characters_are_rejected(self):
+        token = create_token({"user": "alice"}, self.KEY)
+        self.assertIsNone(verify_token(token + "!!!!", self.KEY))
+
     def test_non_hs256_header_is_rejected(self):
         token = create_token({"user": "alice"}, self.KEY)
         header, payload, signature = token.split(".")

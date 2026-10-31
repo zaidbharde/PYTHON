@@ -3,6 +3,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import re
 import secrets
 
 
@@ -22,8 +23,10 @@ def b64url_encode(data):
 
 
 def b64url_decode(data):
+    if not isinstance(data, str) or re.fullmatch(r"[A-Za-z0-9_-]*", data) is None:
+        raise ValueError("invalid base64url data")
     padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(data + padding)
+    return base64.b64decode(data + padding, altchars=b"-_", validate=True)
 
 
 def create_token(payload, secret):
