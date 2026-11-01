@@ -1,66 +1,112 @@
+"""A small recursive-descent JSON parser."""
+
+import json
+import re
+
+
+class JSONParseError(ValueError):
+    """Raised when input is not a valid JSON document."""
+
+
 def parse_json(s):
-    def skip_whitespace(i):
+    if not isinstance(s, str):
+        raise TypeError("JSON input must be a string")
+
+    def fail(message, position):
+        raise JSONParseError(f"{message} at position {position}")
+
+    def whitespace(i):
         while i < len(s) and s[i] in " \t\n\r":
             i += 1
         return i
 
+    def parse_string(i):
+        start = i
+        i += 1
+        escaped = False
+        while i < len(s):
+            char = s[i]
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                try:
+                    return json.loads(s[start:i + 1]), i + 1
+                except json.JSONDecodeError as exc:
+                    fail(f"invalid string ({exc.msg})", start + exc.pos)
+            elif ord(char) < 0x20:
+                fail("unescaped control character in string", i)
+            i += 1
+        fail("unterminated string", start)
+
     def parse_value(i):
-        i = skip_whitespace(i)
-        if s[i] == '{': return parse_object(i)
-        if s[i] == '[': return parse_array(i)
-        if s[i] == '"': return parse_string(i)
-        if s[i:i+4] == 'true': return True, i + 4
-        if s[i:i+5] == 'false': return False, i + 5
-        if s[i:i+4] == 'null': return None, i + 4
-        return parse_number(i)
+        i = whitespace(i)
+        if i >= len(s):
+            fail("expected a value", i)
+        char = s[i]
+        if char == '"':
+            return parse_string(i)
+        if char == "{":
+            return parse_object(i)
+        if char == "[":
+            return parse_array(i)
+        for token, value in (("true", True), ("false", False), ("null", None)):
+            if s.startswith(token, i):
+                return value, i + len(token)
+        match = re.match(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?", s[i:])
+        if match:
+            token = match.group(0)
+            try:
+                value = float(token) if any(c in token for c in ".eE") else int(token)
+            except ValueError:
+                fail("invalid number", i)
+            return value, i + len(token)
+        fail("expected a JSON value", i)
 
     def parse_object(i):
-        obj = {}
-        i += 1
-        i = skip_whitespace(i)
-        if s[i] == '}': return obj, i + 1
+        result = {}
+        i = whitespace(i + 1)
+        if i < len(s) and s[i] == "}":
+            return result, i + 1
         while True:
-            i = skip_whitespace(i)
+            if i >= len(s) or s[i] != '"':
+                fail("expected an object key string", i)
             key, i = parse_string(i)
-            i = skip_whitespace(i)
-            i += 1  # skip ':'
-            value, i = parse_value(i)
-            obj[key] = value
-            i = skip_whitespace(i)
-            if s[i] == ',': i += 1
-            elif s[i] == '}': return obj, i + 1
+            i = whitespace(i)
+            if i >= len(s) or s[i] != ":":
+                fail("expected ':' after object key", i)
+            value, i = parse_value(i + 1)
+            result[key] = value
+            i = whitespace(i)
+            if i < len(s) and s[i] == "}":
+                return result, i + 1
+            if i >= len(s) or s[i] != ",":
+                fail("expected ',' or '}' in object", i)
+            i = whitespace(i + 1)
 
     def parse_array(i):
-        arr = []
-        i += 1
-        i = skip_whitespace(i)
-        if s[i] == ']': return arr, i + 1
+        result = []
+        i = whitespace(i + 1)
+        if i < len(s) and s[i] == "]":
+            return result, i + 1
         while True:
             value, i = parse_value(i)
-            arr.append(value)
-            i = skip_whitespace(i)
-            if s[i] == ',': i += 1
-            elif s[i] == ']': return arr, i + 1
+            result.append(value)
+            i = whitespace(i)
+            if i < len(s) and s[i] == "]":
+                return result, i + 1
+            if i >= len(s) or s[i] != ",":
+                fail("expected ',' or ']' in array", i)
+            i = whitespace(i + 1)
 
-    def parse_string(i):
-        i += 1
-        start = i
-        while s[i] != '"':
-            i += 1
-        return s[start:i], i + 1
-
-    def parse_number(i):
-        start = i
-        while i < len(s) and (s[i].isdigit() or s[i] in ".-"):
-            i += 1
-        num_str = s[start:i]
-        return (float(num_str) if '.' in num_str else int(num_str)), i
-
-    value, _ = parse_value(0)
+    value, end = parse_value(0)
+    end = whitespace(end)
+    if end != len(s):
+        fail("unexpected trailing data", end)
     return value
 
 
 if __name__ == "__main__":
     data = '{"name": "Zaid", "age": 22, "skills": ["Java", "Python"], "active": true}'
-    result = parse_json(data)
-    print(result)
+    print(parse_json(data))
